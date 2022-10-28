@@ -10,7 +10,7 @@ export class UsersController {
 
     @Post()
     create(@Body() req: CreateUserDTO) {
-        return this.usersService.create();
+        return this.usersService.create(req);
     }
 
     @Get()
