@@ -1,43 +1,80 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { PrismaService } from 'src/prisma.service';
-import { UpdateUserDTO } from './dto/updateUser.dto';
 import { users } from '@prisma/client';
+import { PrismaService } from '../prisma.service';
+import { CreateUserDTO } from './dto/createUser.dto';
+import { UpdateUserDTO } from './dto/updateUser.dto';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
-    constructor(private prisma:PrismaService) {} // tem que estar mencionado no module
+  constructor(private prisma: PrismaService) {}
 
-    async create(data): Promise<users> { // retorna promessa pois pode não dar certo
-        const { name, email, password } = data;
-        const user = await this.prisma.users.create({
-            data: {
-                name,
-                email,
-                password,
-            },
-        });
-        if(!user) {
-            throw new HttpException({ // error interrompe código, exception apenas trata o erro
-                status: HttpStatus.FORBIDDEN,
-                message: 'Erro ao criar usuário!',
-            }, HttpStatus.FORBIDDEN);
-        }
-        return user;
+  // await this.verifyUserExists('gabriel@email.com',false);
+  async verifyUserExists(email: string): Promise<boolean> {
+    const user = await this.prisma.users.findUnique({
+      where: {
+        email: email,
+      },
+    });
+    return user ? true : false;
+  }
+
+  async crypto(password: string): Promise<string> {
+    const salt = await bcrypt.genSalt();
+    const hashedPassword = await bcrypt.hash(password, salt);
+    return hashedPassword;
+  }
+
+  async create(data: CreateUserDTO): Promise<users> {
+    const { name, email, password } = data;
+
+    //busca pra saber se o usuário já existe.
+    //findUnique é um método do prisma que busca um usuário pelo campo único por exemplo email.
+    //findFirst é um método do prisma que busca o primeiro registro que encontrar.
+
+    //verificar se usuário já existe.
+    const checkUser = await this.verifyUserExists(email);
+    let user = undefined;
+
+    if (!checkUser) {
+      user = await this.prisma.users.create({
+        data: {
+          name,
+          email,
+          password: await this.crypto(password),
+        },
+      });
     }
 
-    async findAll(): Promise<string> {
-        return 'Lista de usuários!';
+    if (!user) {
+      throw new HttpException(
+        {
+          status: HttpStatus.FORBIDDEN,
+          message: 'Erro ao criar usuário!',
+        },
+        HttpStatus.FORBIDDEN,
+      );
     }
+    return user;
+  }
 
-    async findOne(id: number): Promise<string> {
-        return `Usuário ${id}!`;
-    }
+  async findAll(): Promise<users[]> {
+    return await this.prisma.users.findMany();
+  }
 
-    async update(id: number, req: UpdateUserDTO): Promise<string> {
-        return `Usuário ${id} atualizado com sucesso!`;
-    }
+  async findOne(id: number): Promise<users> {
+    return await this.prisma.users.findUnique({
+      where: {
+        id: id,
+      },
+    });
+  }
 
-    async delete(id: number): Promise<string> {
-        return `Usuário ${id} deletado com sucesso!`;
-    }
+  async update(id: number, req: UpdateUserDTO): Promise<string> {
+    return `Usuário ${id} atualizado com sucesso!`;
+  }
+
+  async remove(id: number): Promise<string> {
+    return `Usuário ${id} deletado com sucesso!`;
+  }
 }
