@@ -4,10 +4,24 @@ import { PrismaService } from '../prisma.service';
 import { CreateUserDTO } from './dto/createUser.dto';
 import { UpdateUserDTO } from './dto/updateUser.dto';
 import * as bcrypt from 'bcrypt';
+import { EmailService } from 'src/email/email.service';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private emailService: EmailService) {}
+
+  async getUserById(id:string): Promise<users> {
+    const user = await this.prisma.users.findUnique({
+      where: {
+        id: Number(id)
+      }
+    });
+
+    if(!user) {
+      throw new HttpException('Usuário não encontrado', HttpStatus.NOT_FOUND);
+    }
+    return user;
+  }
 
   // await this.verifyUserExists('gabriel@email.com',false);
   async verifyUserExists(email: string): Promise<boolean> {
@@ -44,6 +58,16 @@ export class UsersService {
           password: await this.crypto(password),
         },
       });
+      if (
+        await this.emailService.sendEmail(
+          email, 
+          'Bem-vindo ao sistema', 
+          'Você se cadastrou no site Fiap Avanade' ,
+          {}
+        )
+      ) {
+        console.log('Email enviado com sucesso')
+      }
     }
 
     if (!user) {
@@ -71,10 +95,68 @@ export class UsersService {
   }
 
   async update(id: number, req: UpdateUserDTO): Promise<string> {
-    return `Usuário ${id} atualizado com sucesso!`;
+    const user = await this.getUserById(id.toString());
+    const { name, email, password } = req;
+
+    if(email) {
+      const checkEmail = await this.prisma.users.findMany({
+        where: {
+          AND: [{ email: email }, { id: {not: Number(id)} }]
+        }
+      });
+
+      if(checkEmail) {
+        throw new HttpException(
+          {
+            status: HttpStatus.FORBIDDEN,
+            message: 'Este e-mail está indisponível!',
+          },
+          HttpStatus.FORBIDDEN,
+        )
+      }
+    }
+
+    const updatedUser = await this.prisma.users.update({
+      where: {
+        id: id,
+      },
+      data: {
+        name: name ? name : user.name,
+        email: email ? email : user.email,
+        password: password ? await this.crypto(password) : user.password,
+      }
+    });
+
+    if(!updatedUser) {
+      throw new HttpException(
+        {
+          status: HttpStatus.FORBIDDEN,
+          message: 'Erro ao atualizar usuário!',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    return `Usuário ${updatedUser.name} atualizado com sucesso!`
   }
 
-  async remove(id: number): Promise<string> {
-    return `Usuário ${id} deletado com sucesso!`;
+  async remove(id: number): Promise<object> {
+    const user = await this.getUserById(id.toString());
+
+    const deletedUser = await this.prisma.users.delete({
+      where: {
+        id: Number(id),
+      },
+    });
+
+    if(!deletedUser) {
+      throw new HttpException(
+        {
+          status: HttpStatus.FORBIDDEN,
+          message: 'Erro ao deletar usuário!',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+    return { msg: `Usuário ${user.name} deletado com sucesso!` };
   }
 }
