@@ -5,6 +5,6 @@ export class AuthService {
     async authLogin(login: string, password: string) {
         console.log(login);
         console.log(password);
-        return { login, password };
+        return { login, password, msg: 'Usuário autenticado com sucesso!' };
     }
 }
